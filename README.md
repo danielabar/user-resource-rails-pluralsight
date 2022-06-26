@@ -1,0 +1,818 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [Adding a User Resource to a Rails Application](#adding-a-user-resource-to-a-rails-application)
+  - [Designing Data Models](#designing-data-models)
+    - [Context](#context)
+    - [Identifying Entities](#identifying-entities)
+    - [Demo: Identifying Entities](#demo-identifying-entities)
+    - [Creating Resources](#creating-resources)
+    - [Demo: References](#demo-references)
+    - [Demo Relationships](#demo-relationships)
+  - [Implementing Business Rules](#implementing-business-rules)
+    - [Business Rules](#business-rules)
+    - [Demo: Basic Validators](#demo-basic-validators)
+    - [Database Layer](#database-layer)
+    - [Demo: Custom Validators](#demo-custom-validators)
+    - [Hacks and Hooks](#hacks-and-hooks)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
+# Adding a User Resource to a Rails Application
+
+> My notes from Pluralsight [course](https://app.pluralsight.com/library/courses/adding-user-resource-rails-application/table-of-contents)
+
+## Designing Data Models
+
+### Context
+
+* Create an information system to track a company's stock prices. eg: a publicly traded company such as Tesla.
+* Prices should be captured daily.
+* Design for flexibility to store other company stock prices as well.
+
+### Identifying Entities
+
+First step in data modelling.
+
+Entity: Noun or concept that reflects something in the real world.
+
+Questions to ask to identify entities:
+
+1. Who are the players in the narrative? (eg: `Company`). Think in a general mindset to make the model more flexible.
+2. What information has to be stored? (eg: stock price per day). This creates another entity `StockPrice`.
+
+**Candidate Data Models**
+
+At this point, don't use Rails yet, just draw out boxes for each entity, eg: `Company` and `StockPrice`.
+
+![candidate data model](doc-images/candidate-data-model.png "candidate data model")
+
+**Defining Attributes**
+
+Define attributes and data types for each entity.
+
+![entity attributes](doc-images/entity-attributes.png "entity attributes")
+
+Possible data types are:
+
+* string - alphanumeric characters
+* integer - whole numbers
+* decimal (float/long) - decimal numbers
+* boolean - true or false
+* text - longer strings
+* date - a date value
+
+Notice the naming convention of `attribute:data_type`, this will be helpful in implementing model in Rails.
+
+Attributes define an instance of an entity, so the `company_id` identifier on the `StockPrice` entity represents the `Company` this stock price is for, i.e. a relationship, foreign key.
+
+![relationship](doc-images/relationship.png "relationship")
+
+**Naming Conventions**
+
+* Entities should be camel case with no spaces
+* Entities should be named in singular form
+* Attributes should be snake cased with no spaces
+
+### Demo: Identifying Entities
+
+Use spreadsheet to define entities and provide a few examples with their attributes, and to show how FK relationships work.
+
+Spreadsheet will serve as spec for creating Rails resources in next step.
+
+Instructor used Libre Office.
+
+![libre office](doc-images/libre-office.png "libre office")
+
+**Establishing Relationships**
+
+Our example so far has a "one to many" relationship. A single `Company` entity will have many `StockPrice` entities.
+
+* A company *has many* stock prices
+* A stock price *belongs* to one company
+
+![relationships](doc-images/relationships.png "relationships")
+
+Keywords `has_many` and `belongs_to` will be used later when implementing these entities as resources in Rails.
+
+### Creating Resources
+
+Implementing in Rails project.
+
+Good place to start is with an entity that has no dependence on existence of other entities. In this example, `Company`.
+
+Rails general form of command to create an entity/resource:
+
+```
+bin/rails generate model [ResourceName] attr1:data_type attr2:data_type ...
+```
+
+Specifically for `Company`:
+
+```
+bin/rails generate model Company name:string ticker_symbol:string
+```
+
+Notes:
+* Do not need to specify `id`, Rails will create by default.
+* Model name starts with upper case
+* Model name is in singular form
+
+The generate model command will generate several files including:
+* Migration File: `db/migrate/*.rb`
+* Model File: `app/models/*.rb`
+
+Migration file example:
+
+```ruby
+class CreateCompanies < ActiveRecord::Migration[6.0]
+  def change
+    create_table :companies do |t|
+      t.string :name
+      t.string :ticker_symbol
+
+      t.timestamps
+    end
+  end
+end
+```
+
+`[6.0]` is the version number of the ActiveRecord library in use in the project.
+
+The migration class should contain a method `change` containing commands to make changes to the database.
+
+* For creating a new resource, the rails generate command provides an implementation of the `change` method using the `create_table` method.
+* This method takes a symbol representing the plural form of the resource (eg: `:companies`).
+* This plural form will become the table name in the database.
+* Having a model class/object represent a table in the database: ORM (Object Relation Mapping)
+* ActiveRecord library included with Rails is the standard ORM library
+* Attributes in model get mapped to columns in the table
+* Block variable `t` represents instance of table to be created by `create_table` method
+
+**Database Schema**
+
+To actually execute the changes, run: `bin/rails db:migrate`. This will create the table and update the schema file:
+
+![db schema](doc-images/db-schema.png "db schema")
+
+Do *NOT* modify `db/schema.rb` file directly. Only the rails `migrate` and `rollback` commands should modify this file.
+
+The `generate Company...` command also generated a model file:
+
+```ruby
+# app/models/company.rb
+class Company < ApplicationRecord
+end
+```
+
+By convention, rails will map `Company` model to a corresponding table in its pluralized form `companies`.
+
+Instances of a model class represent records in the underlying table.
+
+To represent a one to many relationship between models:
+
+![one to many](doc-images/one-to-many.png "one to many")
+
+A one to many relationship in Rails uses two keywords to express it:
+1. `has_many :stock_prices` on Company class. Any instance of Company class can invoke the `.stock_prices` method to get returned an array of objects representing instances of StockPrice class.
+2. `belongs_to :company` relates an instance of StockPrice back to the `Company` instance its a stock price for. This will look for a field `company_id` to query for the associated company. Given an instance of a StockPrice, can invoke the `.company` method to get returned an instance of the Company class.
+
+**Other Methods**
+
+Useful methods that can be invoked on a model instance, that will execute queries against the database:
+
+* `.save` Performs an update if the instance already has an `id` populated, or performs an insert that creates new record if `id` not present.
+* `.save!` Same as `.save` but if validation fails, raises an exception.
+* `.update` Only performs an update on an existing record. Cannot be invoked on a new record (i.e. no `id`). Pass in attribute symbols and their corresponding values to tell Rails which columns of the record should be updated.
+* `.destroy!` Deletes the corresponding record from the database. When passed a value for `dependent` in a `has_many` declaration, each instance of associated entity will call `before_destroy` and `after_destroy` methods of each record.
+* `delete_all` Delete all associated records in a single query.
+
+### Demo: References
+
+Instructor started with Rails project already setup but didn't mention dependency versions or how it was created. I have:
+
+```bash
+$ ruby --version
+ruby 2.7.2p137 (2020-10-01 revision 5445e04352) [x86_64-darwin19]
+
+$ rails --version
+Rails 6.1.6
+
+$ gem which rails
+/Users/dbaron/.rbenv/versions/2.7.2/lib/ruby/gems/2.7.0/gems/railties-6.1.6/lib/rails.rb
+
+$ bundler --version
+Bundler version 2.1.4
+
+$ gem which bundler
+/Users/dbaron/.rbenv/versions/2.7.2/lib/ruby/2.7.0/bundler.rb
+
+$ node --version
+v14.16.0
+
+$ npm --version
+6.14.11
+
+$ yarn --version
+1.22.18
+
+# scaffold new project
+$ rails new stocktracker
+$ cd stocktracker
+
+# init database
+$ bin/rails db:create
+# Created database 'db/development.sqlite3'
+# Created database 'db/test.sqlite3'
+$ bin/rails db:migrate
+```
+
+Now joining along with instructor in model creation:
+
+```
+bin/rails generate model Company name:string ticker_symbol:string
+```
+
+Output:
+
+```
+invoke  active_record
+create    db/migrate/20220619134605_create_companies.rb
+create    app/models/company.rb
+invoke    test_unit
+create      test/models/company_test.rb
+create      test/fixtures/companies.yml
+```
+
+Generated migration:
+
+```ruby
+# stocktracker/db/migrate/20220619134605_create_companies.rb
+class CreateCompanies < ActiveRecord::Migration[6.1]
+  def change
+    create_table :companies do |t|
+      t.string :name
+      t.string :ticker_symbol
+
+      t.timestamps
+    end
+  end
+end
+```
+
+Apply change with: `bin/rails db:migrate`:
+
+```
+== 20220619134605 CreateCompanies: migrating ==================================
+-- create_table(:companies)
+   -> 0.0053s
+== 20220619134605 CreateCompanies: migrated (0.0054s) =========================
+```
+
+The migrate command created table in default SQLite database and updated schema file:
+
+```ruby
+# stocktracker/db/schema.rb
+ActiveRecord::Schema.define(version: 2022_06_19_134605) do
+
+  create_table "companies", force: :cascade do |t|
+    t.string "name"
+    t.string "ticker_symbol"
+    t.datetime "created_at", precision: 6, null: false
+    t.datetime "updated_at", precision: 6, null: false
+  end
+
+end
+```
+
+Notice the `created_at` and `updated_at` timestamp fields were created by default from the `rails generate model...` command.
+
+The `generate model...` command also created a Company model class which extends `ApplicationRecord` class:
+
+```ruby
+# stocktracker/app/models/company.rb
+class Company < ApplicationRecord
+end
+```
+
+Now generate StockPrice model. Recall this has a foreign key relationship to Company.
+
+Rather than explicitly stating a column `company_id` as type `integer`, Rails has a `references` helper to indicate that the model being created refers to another entity.
+
+Recall the general form is `attr:data_type`. For a relationship, the `attr` would be the model that this model has a relationship to, and the `data_type` will be references:
+
+```
+bin/rails generate model StockPrice price:decimal captured_at:date company:references
+```
+
+Rails will look for a model named company and create a field `company_id` on the StockPrice model/table.
+
+```
+invoke  active_record
+create    db/migrate/20220619135700_create_stock_prices.rb
+create    app/models/stock_price.rb
+invoke    test_unit
+create      test/models/stock_price_test.rb
+create      test/fixtures/stock_prices.yml
+```
+
+Generated migration file:
+
+```ruby
+# stocktracker/db/migrate/20220619140139_create_stock_prices.rb
+class CreateStockPrices < ActiveRecord::Migration[6.1]
+  def change
+    create_table :stock_prices do |t|
+      t.decimal :price
+      t.date :captured_at
+      t.references :company, null: false, foreign_key: true
+
+      t.timestamps
+    end
+  end
+end
+```
+
+Notice that where you would expect something like `t.integer :company_id`, there is `t.references :company, null: false, foreign_key: true`. This defines a foreign key constraint. This tells database to treat the column `company_id` on `stock_prices` table to be a foreign key to the `id` column in `companies` table.
+
+Run this with `bin/rails db:migrate` and check how it updated the schema file:
+
+```ruby
+# stocktracker/db/schema.rb
+ActiveRecord::Schema.define(version: 2022_06_19_140139) do
+
+  create_table "companies", force: :cascade do |t|
+    t.string "name"
+    t.string "ticker_symbol"
+    t.datetime "created_at", precision: 6, null: false
+    t.datetime "updated_at", precision: 6, null: false
+  end
+
+  create_table "stock_prices", force: :cascade do |t|
+    t.decimal "price"
+    t.date "captured_at"
+    t.integer "company_id", null: false
+    t.datetime "created_at", precision: 6, null: false
+    t.datetime "updated_at", precision: 6, null: false
+    t.index ["company_id"], name: "index_stock_prices_on_company_id"
+  end
+
+  add_foreign_key "stock_prices", "companies"
+end
+```
+
+Notice that `company_id` column in `stock_prices` table has been defined as an `integer`.
+
+Inspect SQLite dev db directly:
+
+```sql
+sqlite> .schema stock_prices --indent
+CREATE TABLE IF NOT EXISTS "stock_prices"(
+  "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+  "price" decimal,
+  "captured_at" date,
+  "company_id" integer NOT NULL,
+  "created_at" datetime(6) NOT NULL,
+  "updated_at" datetime(6) NOT NULL,
+  CONSTRAINT "fk_rails_2ce23061cf"
+  FOREIGN KEY("company_id")
+  REFERENCES "companies"("id")
+);
+CREATE INDEX "index_stock_prices_on_company_id" ON "stock_prices"(
+  "company_id"
+);
+```
+
+### Demo Relationships
+
+Use Rails console to create a new company, then create stock prices and relate them to the company using the company instance variable. We can use `company` reference when creating a `StockPrice` instance because the `StockPrice` model specifies `belongs_to :company`.
+
+Can then use the company reference `c` to get at its associated stock prices via `has_many :stock_prices`, which returns an array of instances of `StockPrice`. Can loop over them to display all stock price info for the company.
+
+Stock prices can be deleted for a company by looping over them and calling `destroy!` method. Then calling `c.stock_prices` again (after reloading `c`) returns empty array.
+
+Can also update an instance of a model by updating its attributes and then calling `.save` method. Can also use `.update` method, passing in any attributes to be updated as a hash.
+
+```ruby
+c = Company.new(name: "Tesla", ticker_symbol: "TSLA")
+# => #<Company id: nil, name: "Tesla", ticker_symbol: "TSLA", created_at: nil, updated_at: nil>
+c.save
+# TRANSACTION (0.1ms)  begin transaction
+#   Company Create (2.9ms)  INSERT INTO "companies" ("name", "ticker_symbol", "created_at", "updated_at") VALUES (?, ?, ?, ?)  [["name", "Tesla"], ["ticker_symbol", "TSLA"], ["created_at", "2022-06-25 11:53:03.977858"], ["updated_at", "2022-06-25 11:53:03.977858"]]
+#   TRANSACTION (1.2ms)  commit transaction
+# => true
+c.id
+# => 1
+
+p = StockPrice.new(price: 500, captured_at: "2020-01-01", company: c)
+# => #<StockPrice id: nil, price: 0.5e3, captured_at: "2020-01-01", company_id: 1, created_at: nil, updated_at: nil>
+p.save
+#   TRANSACTION (0.2ms)  begin transaction
+#   StockPrice Create (1.6ms)  INSERT INTO "stock_prices" ("price", "captured_at", "company_id", "created_at", "updated_at") VALUES (?, ?, ?, ?, ?)  [["price", 500.0], ["captured_at", "2020-01-01"], ["company_id", 1], ["created_at", "2022-06-25 11:57:10.516373"], ["updated_at", "2022-06-25 11:57:10.516373"]]
+#   TRANSACTION (1.3ms)  commit transaction
+# => true
+
+p = StockPrice.new(price: 520, captured_at: "2020-01-02", company: c)
+=> #<StockPrice id: nil, price: 0.52e3, captured_at: "2020-01-02", company_id: 1, created_at: nil, updated_at: nil>
+p.save
+  # TRANSACTION (0.1ms)  begin transaction
+  # StockPrice Create (0.8ms)  INSERT INTO "stock_prices" ("price", "captured_at", "company_id", "created_at", "updated_at") VALUES (?, ?, ?, ?, ?)  [["price", 520.0], ["captured_at", "2020-01-02"], ["company_id", 1], ["created_at", "2022-06-25 11:58:42.571899"], ["updated_at", "2022-06-25 11:58:42.571899"]]
+  # TRANSACTION (0.8ms)  commit transaction
+# => true
+p.id
+# => 2
+
+c.stock_prices
+#   StockPrice Load (0.7ms)  SELECT "stock_prices".* FROM "stock_prices" WHERE "stock_prices"."company_id" = ? /* loading for inspect */ LIMIT ?  [["company_id", 1], ["LIMIT", 11]]
+# => #<ActiveRecord::Associations::CollectionProxy [#<StockPrice id: 1, price: 0.5e3, captured_at: "2020-01-01", company_id: 1, created_at: "2022-06-25 11:57:10.516373000 +0000", updated_at: "2022-06-25 11:57:10.516373000 +0000">, #<StockPrice id: 2, price: 0.52e3, captured_at: "2020-01-02", company_id: 1, created_at: "2022-06-25 11:58:42.571899000 +0000", updated_at: "2022-06-25 11:58:42.571899000 +0000">]>
+
+c.stock_prices.each { |sp| puts "#{sp.company.name} at #{sp.captured_at} has a stock price value of #{sp.price}" }
+#   StockPrice Load (0.7ms)  SELECT "stock_prices".* FROM "stock_prices" WHERE "stock_prices"."company_id" = ?  [["company_id", 1]]
+# Tesla at 2020-01-01 has a stock price value of 500.0
+# Tesla at 2020-01-02 has a stock price value of 520.0
+# => [#<StockPrice id: 1, price: 0.5e3, captured_at: "2020-01-01", company_id: 1, created_at: "2022-06-25 11:57:10.516373000 +0000", updated_at: "2022-06-25 11:57:10.516373000 +0000">, #<StockPrice id: 2, price: 0.52e3, captured_at: "2020-01-02", company_id: 1, created_at: "2022-06-25 11:58:42.571899000 +0000", updated_at: "2022-06-25 11:58:42.571899000 +0000">]
+
+c.stock_prices.each { |sp| sp.destroy! }
+#   TRANSACTION (0.2ms)  begin transaction
+#   StockPrice Destroy (1.4ms)  DELETE FROM "stock_prices" WHERE "stock_prices"."id" = ?  [["id", 1]]
+#   TRANSACTION (1.1ms)  commit transaction
+#   TRANSACTION (0.1ms)  begin transaction
+#   StockPrice Destroy (0.4ms)  DELETE FROM "stock_prices" WHERE "stock_prices"."id" = ?  [["id", 2]]
+#   TRANSACTION (0.6ms)  commit transaction
+# => [#<StockPrice id: 1, price: 0.5e3, captured_at: "2020-01-01", company_id: 1, created_at: "2022-06-25 11:57:10.516373000 +0000", updated_at: "2022-06-25 11:57:10.516373000 +0000">, #<StockPrice id: 2, price: 0.52e3, captured_at: "2020-01-02", company_id: 1, created_at: "2022-06-25 11:58:42.571899000 +0000", updated_at: "2022-06-25 11:58:42.571899000 +0000">]
+
+c = Company.find(1)
+#   Company Load (1.3ms)  SELECT "companies".* FROM "companies" WHERE "companies"."id" = ? LIMIT ?  [["id", 1], ["LIMIT", 1]]
+# => #<Company id: 1, name: "Tesla", ticker_symbol: "TSLA", created_at: "2022-06-25 11:53:03.977858000 +0000", updated_at: "2022-06-25...
+c.stock_prices
+#   StockPrice Load (0.2ms)  SELECT "stock_prices".* FROM "stock_prices" WHERE "stock_prices"."company_id" = ? /* loading for inspect */ LIMIT ?  [["company_id", 1], ["LIMIT", 11]]
+# => #<ActiveRecord::Associations::CollectionProxy []>
+
+c.ticker_symbol
+# => "TSLA"
+c.ticker_symbol = "TLA"
+# => "TLA"
+c.save
+#   TRANSACTION (0.1ms)  begin transaction
+#   Company Update (1.5ms)  UPDATE "companies" SET "ticker_symbol" = ?, "updated_at" = ? WHERE "companies"."id" = ?  [["ticker_symbol", "TLA"], ["updated_at", "2022-06-25 12:19:04.860505"], ["id", 1]]
+#   TRANSACTION (1.4ms)  commit transaction
+# => true
+
+c.update(ticker_symbol: "TSLA")
+#   TRANSACTION (1.8ms)  begin transaction
+#   Company Update (0.8ms)  UPDATE "companies" SET "ticker_symbol" = ?, "updated_at" = ? WHERE "companies"."id" = ?  [["ticker_symbol", "TSLA"], ["updated_at", "2022-06-25 12:21:03.509217"], ["id", 1]]
+#   TRANSACTION (1.9ms)  commit transaction
+# => true
+```
+
+## Implementing Business Rules
+
+### Business Rules
+
+Types of business rules:
+1. Low Level: Attribute level rules and behaviour (eg: company name must be present and unique)
+2. High Level: How data models interact with each other (eg: a company can have 0, 1, or more associated stock prices, and these prices should be displayed in order of ascending captured_at date)
+
+This course will focus on low level business rules, these are implemented directly on data model.
+
+High level rules are implemented in the service layer of an application.
+
+**StockPrice low level rules**
+
+- should always have an amount
+- value of amount should be numerical
+- should have a captured_at attribute
+- captured_at should be a valid date
+- should have a reference to a company
+
+
+Rails ActiveRecord provides keywords to implement low level rules.
+
+**Basic Rails Validations**
+
+General syntax is:
+
+```ruby
+validates :attribute_name, validator: value
+```
+
+This would be placed in the data model class.
+
+Common validators include:
+
+* presence (true or false)
+* numericality (true or false)
+* uniqueness (true or false)
+
+Rails will not persist data updates to models if any of the attribute values violate the specified validation rules.
+
+**How are models validated?**
+
+Lifecycle:
+
+1. Trigger validation on create or save
+2. Evaluate all validation declarations
+3. Append to "errors" attribute if validated false
+
+`errors` is an array of hashes where each entry has a reference to the attribute name that failed validation and its error message: `[ {attribute: x, type: y} ]`
+
+**Model (instance) Methods to Check for Errors**
+
+1. `.valid?` Returns true or false
+2. `.errors.any?` Check if errors array has any content, returns true or false
+
+**Custom Validation Methods**
+
+Can write your own methods to implement any custom validation that isn't provided by Rails.
+
+General form:
+
+```ruby
+class SomeModel < ApplicationRecord
+  validate :method_name
+
+  def method_name
+    self.errors.add(:attribute_name, "some error message")
+  end
+end
+```
+
+### Demo: Basic Validators
+
+Create some low level business rules for company model:
+
+```ruby
+class Company < ApplicationRecord
+  validates :name, presence: true
+  has_many :stock_prices
+end
+```
+
+Try out validation in Rails console by creating a company without a name:
+
+```ruby
+c = Company.new
+  #  (1.5ms)  SELECT sqlite_version(*)
+# => #<Company id: nil, name: nil, ticker_symbol: nil, created_at: nil, updated_at: nil>
+
+c.save
+# => false
+
+c.errors
+# => #<ActiveModel::Errors:0x00007feb6b5f6618 @base=#<Company id: nil, name: nil, ticker_symbol: nil, created_at: nil, updated_at: nil>, @errors=[#<ActiveModel::Error attribute=name, type=blank, options={}>]>
+
+c.errors.messages
+# => {:name=>["can't be blank"]}
+```
+
+Add name uniqueness rule:
+
+```ruby
+class Company < ApplicationRecord
+  validates :name, presence: true
+  validates :name, uniqueness: true
+
+  has_many :stock_prices
+end
+```
+
+Back in console, reload the session to have new code change take effect. Then try to create a new company with name "Tesla", recall we already created this in the database in an earlier module so the new one should be invalid:
+
+```ruby
+reload!
+# Reloading...
+# => true
+
+c = Company.new(name: "Tesla")
+#    (0.1ms)  SELECT sqlite_version(*)
+# => #<Company id: nil, name: "Tesla", ticker_symbol: nil, created_at: nil, updated_at: nil>
+
+c.save
+#   TRANSACTION (0.1ms)  begin transaction
+#   Company Exists? (0.5ms)  SELECT 1 AS one FROM "companies" WHERE "companies"."name" = ? LIMIT ?  [["name", "Tesla"], ["LIMIT", 1]]
+#   TRANSACTION (0.1ms)  rollback transaction
+# => false
+
+c.errors.messages
+# => {:name=>["has already been taken"]}
+```
+
+Shortcut when applying multiple validators to the same attribute - combine in one line. Add the same presence/unique to ticker symbol:
+
+```ruby
+class Company < ApplicationRecord
+  validates :name, presence: true, uniqueness: true
+  validates :ticker_symbol, presence: true, uniqueness: true
+
+  has_many :stock_prices
+end
+```
+
+Add custom validation rule for ticker symbol - must be at least 2 characters and no more than 4. Use Rails console to work out logic first:
+
+```ruby
+s = "TSLA"
+# => "TSLA"
+s.size
+# => 4
+s.size >= 2 and s.size <= 4
+# => true
+s.size < 2 or s.size > 4
+# => false
+```
+
+If `s.size < 2 or s.size > 4` returns true, it means the number of characters in string `s` violates the custom rule for ticker_symbol length.
+
+Add this rule to Company model. Start by adding a method to perform the validation. Make sure the ticker_symbol is populated before attempting validation with the `.present?` method. Then use the `validate` macro, passing in the symbol of the custom method name.
+
+`validates` macro is for built in Rails validations, `validate` is for custom validations.
+
+```ruby
+class Company < ApplicationRecord
+  validates :name, presence: true, uniqueness: true
+  validates :ticker_symbol, presence: true, uniqueness: true
+
+  validate :validate_length_of_ticker_symbol
+
+  has_many :stock_prices
+
+  def validate_length_of_ticker_symbol
+    if self.ticker_symbol.present?
+      if self.ticker_symbol.size < 2 or self.ticker_symbol.size > 4
+        self.errors.add(:ticker_symbol, "Length should be at least 2 and at most 4")
+      end
+    end
+  end
+end
+```
+
+Reload and test in console:
+
+```ruby
+c = Company.new(name: "X", ticker_symbol: "X")
+#    (0.1ms)  SELECT sqlite_version(*)
+# => #<Company id: nil, name: "X", ticker_symbol: "X", created_at: nil, updated_at: nil>
+
+c.save
+#   TRANSACTION (0.1ms)  begin transaction
+#   Company Exists? (0.1ms)  SELECT 1 AS one FROM "companies" WHERE "companies"."name" = ? LIMIT ?  [["name", "X"], ["LIMIT", 1]]
+#   Company Exists? (0.1ms)  SELECT 1 AS one FROM "companies" WHERE "companies"."ticker_symbol" = ? LIMIT ?  [["ticker_symbol", "X"], ["LIMIT", 1]]
+#   TRANSACTION (0.0ms)  rollback transaction
+# => false
+
+c.errors.messages
+# => {:ticker_symbol=>["Length should be at least 2 and at most 4"]}
+```
+
+### Database Layer
+
+**Creating Migration Files**
+
+General form of command to create a new migration:
+
+```
+bin/rails generate migration name_of_migration_file
+```
+
+Will create timestamped file: `db/migrate/xxxxxx_name_of_migration_file` with a `change` method where you specify what changes you want applied to the database.
+
+**Adding / Removing Columns**
+
+```ruby
+# db/migrate/xxxx_file.rb
+
+class XxxxFile < ActiveRecord::Migration[6.0]
+  def change
+    add_column :table_name, :column_name, :data_type
+    remove_column :table_name, :column_name
+  end
+end
+```
+
+Never go back and modify a migration file once the change has been pushed out to prod. Always create new migration files, these represent a history of all db changes.
+
+Instead of `change`, older Rails versions generated `up` and `down` methods to be invoked on `bin/rails db:migrate` and `bin/rails db:rollback` respectively:
+
+```ruby
+# db/migrate/xxxx_file.rb
+
+class XxxxFile < ActiveRecord::Migration[6.0]
+  def up
+    # ...
+  end
+
+  def down
+    # ...
+  end
+end
+```
+
+### Demo: Custom Validators
+
+Add `risk_factor` attribute to Company model that can only hold one of the following values:
+* LOW
+* MEDIUM
+* HIGH
+
+Start by generating a migration file:
+
+```bash
+bin/rails generate migration add_risk_factor_to_companies
+# invoke  active_record
+# create    db/migrate/20220626125729_add_risk_factor_to_companies.rb
+```
+
+Generates an empty migration file, let's implement `change` method to add the column:
+
+```ruby
+# stocktracker/db/migrate/20220626125729_add_risk_factor_to_companies.rb
+class AddRiskFactorToCompanies < ActiveRecord::Migration[6.1]
+  def change
+    add_column :companies, :risk_factor, :string
+  end
+end
+```
+
+Run `bin/rails db:migrate` to apply migration, output:
+
+```
+== 20220626125729 AddRiskFactorToCompanies: migrating =========================
+-- add_column(:companies, :risk_factor, :string)
+   -> 0.0027s
+== 20220626125729 AddRiskFactorToCompanies: migrated (0.0028s) ================
+```
+
+After this runs, `db/schema.rb` gets updated to show that `companies` table now has a `risk_factor` string column:
+
+```ruby
+create_table "companies", force: :cascade do |t|
+  t.string "name"
+  t.string "ticker_symbol"
+  t.datetime "created_at", precision: 6, null: false
+  t.datetime "updated_at", precision: 6, null: false
+  t.string "risk_factor"
+end
+```
+
+Implement low level business rules for `risk_factor` in Company model. It should be present, and only one of three possible values. To restrict values, create a static variable within model `RISK_FACTORS` that contains an array of string allowed values. Then use built-in Rails `inclusion` validator to hook up the array to the `risk_factor` column.
+
+By Ruby convention, static variables are named in all upper case.
+
+```ruby
+class Company < ApplicationRecord
+  RISK_FACTORS = [
+    "HIGH",
+    "MEDIUM",
+    "LOW"
+  ]
+
+  validates :name, presence: true, uniqueness: true
+  validates :ticker_symbol, presence: true, uniqueness: true
+  validates :risk_factor, presence: true, inclusion: { in: RISK_FACTORS }
+
+  validate :validate_length_of_ticker_symbol
+
+  has_many :stock_prices
+
+  def validate_length_of_ticker_symbol
+    if self.ticker_symbol.present?
+      if self.ticker_symbol.size < 2 or self.ticker_symbol.size > 4
+        self.errors.add(:ticker_symbol, "Length should be at least 2 and at most 4")
+      end
+    end
+  end
+end
+```
+
+Test new validation in Rails console. Rather than creating a new company, use `find` method, passing in an id to get an existing company. Then use `update` method to attempt to save an invalid risk factor, and then try a valid value:
+
+```ruby
+c = Company.find(1)
+#    (0.7ms)  SELECT sqlite_version(*)
+#   Company Load (0.3ms)  SELECT "companies".* FROM "companies" WHERE "companies"."id" = ? LIMIT ?  [["id", 1], ["LIMIT", 1]]
+# => #<Company id: 1, name: "Tesla", ticker_symbol: "TSLA", created_at: "2022-06-25 11:53:03.977858000 +0000", updated_at: "2022-06-25 12:21...
+
+c.update(risk_factor: "NON-EXISTENT")
+#   TRANSACTION (0.1ms)  begin transaction
+#   Company Exists? (0.1ms)  SELECT 1 AS one FROM "companies" WHERE "companies"."name" = ? AND "companies"."id" != ? LIMIT ?  [["name", "Tesla"], ["id", 1], ["LIMIT", 1]]
+#   Company Exists? (0.1ms)  SELECT 1 AS one FROM "companies" WHERE "companies"."ticker_symbol" = ? AND "companies"."id" != ? LIMIT ?  [["ticker_symbol", "TSLA"], ["id", 1], ["LIMIT", 1]]
+#   TRANSACTION (0.1ms)  rollback transaction
+# => false
+
+c.errors.messages
+# => {:risk_factor=>["is not included in the list"]}
+
+c.risk_factor = "HIGH"
+# => "HIGH"
+
+c.save
+#   TRANSACTION (0.1ms)  begin transaction
+#   Company Exists? (0.1ms)  SELECT 1 AS one FROM "companies" WHERE "companies"."name" = ? AND "companies"."id" != ? LIMIT ?  [["name", "Tesla"], ["id", 1], ["LIMIT", 1]]
+#   Company Exists? (0.1ms)  SELECT 1 AS one FROM "companies" WHERE "companies"."ticker_symbol" = ? AND "companies"."id" != ? LIMIT ?  [["ticker_symbol", "TSLA"], ["id", 1], ["LIMIT", 1]]
+#   Company Update (1.1ms)  UPDATE "companies" SET "updated_at" = ?, "risk_factor" = ? WHERE "companies"."id" = ?  [["updated_at", "2022-06-26 13:19:08.462247"], ["risk_factor", "HIGH"], ["id", 1]]
+#   TRANSACTION (2.4ms)  commit transaction
+# => true
+```
+
+### Hacks and Hooks
