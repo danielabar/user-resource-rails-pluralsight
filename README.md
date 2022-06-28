@@ -16,6 +16,8 @@
     - [Database Layer](#database-layer)
     - [Demo: Custom Validators](#demo-custom-validators)
     - [Hacks and Hooks](#hacks-and-hooks)
+    - [Demo Part 1: Hacks and Hooks](#demo-part-1-hacks-and-hooks)
+    - [Demo Part 2: Hacks and Hooks](#demo-part-2-hacks-and-hooks)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -816,3 +818,175 @@ c.save
 ```
 
 ### Hacks and Hooks
+
+**Adding Constraints**
+
+Can add a database constraint via migration file when adding a column by specifying a hash:
+
+```ruby
+add_column :table_name, :column_name, :data_type, constraint
+```
+
+Eg: specify that the `name` column in `companies` table must have a value:
+
+```ruby
+add_column :companies, :name, :string, null: false
+```
+
+**Custom Database Modifications**
+
+For some database modifications, Rails doesn't have appropriate helper methods that are compatible with all databases, in this case, use `execute` method that accepts a sql string to perform the specific modification. Need to define `up` and `down` methods for migrate/rollback respectively.
+
+```ruby
+class XxxxFile < ActiveRecord::Migration[6.0]
+  def up
+    execute <<-SQL
+      -- custom SQL here...
+    SQL
+  end
+
+  def down
+    execute <<-SQL
+      -- custom SQL here...
+    SQL
+  end
+end
+```
+
+**Model Hooks**
+
+For high level business rules, a change in one model may have an effect on other models. Rails provides lifecycle hooks to perform custom logic at certain points in that model's lifecycle.
+
+* `before_validation :method_name`: Will run `method_name` before validations are evaluated
+* `before_save :method_name`: Will run `method_name` before performing an insert or update (assumes model has already passed validation). Does not execute `method_name` of the model's `.valid?` method returns false
+* `after_save :method_name`: Runs `method_name` after a model instance has been successfully saved or updated in the database.
+
+### Demo Part 1: Hacks and Hooks
+
+Currently we can bypass application level validation by inserting invalid data directly in the database. Launch db client with `sqlite3 stocktracker/db/development.sqlite3`:
+
+```sql
+INSERT INTO companies(name, ticker_symbol, created_at, updated_at, risk_factor) VALUES("X", "X", time('now'), time('now'), "NON-EXISTENT");
+-- success
+
+select * from companies where name = "X";
+-- 2|X|X|10:35:58|10:35:58|NON-EXISTENT
+```
+
+Inserting directly into database bypasses application validation, eg: risk_factor should only be: LOW, MEDIUM, HIGH.
+
+To fix this, first run `bin/rails db:reset` to drop db and apply schema from beginning. Then create a new migration file to correct previous lack of constraints at the database level:
+
+```
+bin/rails db:reset
+Dropped database 'db/development.sqlite3'
+Dropped database 'db/test.sqlite3'
+Created database 'db/development.sqlite3'
+Created database 'db/test.sqlite3'
+
+bin/rails generate migration add_constraints_to_companies
+invoke  active_record
+create    db/migrate/20220628104551_add_constraints_to_companies.rb
+```
+
+Edit the migration, easiest way is to remove the column, then add it back with constraint - BUT WOULDN'T THIS CAUSE A PROBLEM IN PRODUCTION???
+
+```ruby
+# stocktracker/db/migrate/20220628104551_add_constraints_to_companies.rb
+class AddConstraintsToCompanies < ActiveRecord::Migration[6.1]
+  def change
+    remove_column :companies, :name
+    add_column :companies, :name, :string, null: false
+
+    remove_column :companies, :ticker_symbol
+    add_column :companies, :ticker_symbol, :string, null: false
+
+    remove_column :companies, :risk_factor
+    add_column :companies, :risk_factor, :string, null: false
+  end
+end
+```
+
+Apply migration with `bin/rails db:migrate`:
+
+```
+== 20220628104551 AddConstraintsToCompanies: migrating ========================
+-- remove_column(:companies, :name)
+   -> 0.0167s
+-- add_column(:companies, :name, :string, {:null=>false})
+   -> 0.0112s
+-- remove_column(:companies, :ticker_symbol)
+   -> 0.0103s
+-- add_column(:companies, :ticker_symbol, :string, {:null=>false})
+   -> 0.0141s
+-- remove_column(:companies, :risk_factor)
+   -> 0.0111s
+-- add_column(:companies, :risk_factor, :string, {:null=>false})
+   -> 0.0223s
+== 20220628104551 AddConstraintsToCompanies: migrated (0.0886s) ===============
+```
+
+Try to insert a record in `companies` table directly in db with invalid/empty ticker_symbol and risk_factor, this time insert fails:
+
+```sql
+INSERT INTO companies(name, ticker_symbol, created_at, updated_at, risk_factor) VALUES("X", NULL, time('now'), time('now'), NULL);
+-- Error: stepping, NOT NULL constraint failed: companies.ticker_symbol (19)
+```
+
+Implement new business rule: Every time a ticker_symbol is entered for a company, the characters should be capitalized -> implement this with `before_save` lifecycle hook in Company model class.
+
+Note that by the time `before_save` hook runs, validation has already passed so its safe to assume that `ticker_symbol` is populated, therefore no need to first check if its present as we had to do earlier in custom validation method `validate_length_of_ticker_symbol`:
+
+```ruby
+# stocktracker/app/models/company.rb
+class Company < ApplicationRecord
+  RISK_FACTORS = [
+    "HIGH",
+    "MEDIUM",
+    "LOW"
+  ]
+
+  validates :name, presence: true, uniqueness: true
+  validates :ticker_symbol, presence: true, uniqueness: true
+  validates :risk_factor, presence: true, inclusion: { in: RISK_FACTORS }
+
+  validate :validate_length_of_ticker_symbol
+
+  before_save :capitalize_ticker_symbol
+
+  has_many :stock_prices
+
+  def capitalize_ticker_symbol
+    self.ticker_symbol = self.ticker_symbol.upcase
+  end
+
+  def validate_length_of_ticker_symbol
+    if self.ticker_symbol.present?
+      if self.ticker_symbol.size < 2 or self.ticker_symbol.size > 4
+        self.errors.add(:ticker_symbol, "Length should be at least 2 and at most 4")
+      end
+    end
+  end
+end
+```
+
+Try this out in Rails console `bin/rails c` by saving a valid company with lower case ticker symbol. It gets converted to upper case on inserting into db:
+
+```ruby
+c = Company.new(name: "X", ticker_symbol: "yyy", risk_factor: "HIGH")
+#    (0.6ms)  SELECT sqlite_version(*)
+# => #<Company id: nil, created_at: nil, updated_at: nil, name: "X", ticker_symbol: "yyy", risk_factor: "HIGH">
+
+c.save
+#   TRANSACTION (0.1ms)  begin transaction
+#   Company Exists? (0.2ms)  SELECT 1 AS one FROM "companies" WHERE "companies"."name" = ? LIMIT ?  [["name", "X"], ["LIMIT", 1]]
+#   Company Exists? (0.1ms)  SELECT 1 AS one FROM "companies" WHERE "companies"."ticker_symbol" = ? LIMIT ?  [["ticker_symbol", "yyy"], ["LIMIT", 1]]
+#   Company Create (0.5ms)  INSERT INTO "companies" ("created_at", "updated_at", "name", "ticker_symbol", "risk_factor") VALUES (?, ?, ?, ?, ?)  [["created_at", "2022-06-28 11:05:43.260066"], ["updated_at", "2022-06-28 11:05:43.260066"], ["name", "X"], ["ticker_symbol", "YYY"], ["risk_factor", "HIGH"]]
+#   TRANSACTION (1.1ms)  commit transaction
+# => true
+
+c.ticker_symbol
+# => "YYY"
+```
+
+### Demo Part 2: Hacks and Hooks

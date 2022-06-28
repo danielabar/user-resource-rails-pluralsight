@@ -11,7 +11,13 @@ class Company < ApplicationRecord
 
   validate :validate_length_of_ticker_symbol
 
+  before_save :capitalize_ticker_symbol
+
   has_many :stock_prices
+
+  def capitalize_ticker_symbol
+    self.ticker_symbol = self.ticker_symbol.upcase
+  end
 
   def validate_length_of_ticker_symbol
     if self.ticker_symbol.present?
