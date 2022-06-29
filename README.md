@@ -1160,3 +1160,153 @@ Now generate another scaffold for a related entity `CryptoPrice`. This entity ha
 ```
 bin/rails generate scaffold CryptoPrice price:decimal cryptocurrency:references captured_at:date
 ```
+
+Outputs:
+
+```
+invoke  active_record
+   create    db/migrate/20220629124619_create_crypto_prices.rb
+   create    app/models/crypto_price.rb
+   invoke    test_unit
+   create      test/models/crypto_price_test.rb
+   create      test/fixtures/crypto_prices.yml
+   invoke  resource_route
+    route    resources :crypto_prices
+   invoke  scaffold_controller
+   create    app/controllers/crypto_prices_controller.rb
+   invoke    erb
+   create      app/views/crypto_prices
+   create      app/views/crypto_prices/index.html.erb
+   create      app/views/crypto_prices/edit.html.erb
+   create      app/views/crypto_prices/show.html.erb
+   create      app/views/crypto_prices/new.html.erb
+   create      app/views/crypto_prices/_form.html.erb
+   invoke    resource_route
+   invoke    test_unit
+   create      test/controllers/crypto_prices_controller_test.rb
+   create      test/system/crypto_prices_test.rb
+   invoke    helper
+   create      app/helpers/crypto_prices_helper.rb
+   invoke      test_unit
+   invoke    jbuilder
+   create      app/views/crypto_prices/index.json.jbuilder
+   create      app/views/crypto_prices/show.json.jbuilder
+   create      app/views/crypto_prices/_crypto_price.json.jbuilder
+   invoke  assets
+   invoke    scss
+   create      app/assets/stylesheets/crypto_prices.scss
+   invoke  scss
+identical    app/assets/stylesheets/scaffolds.scss
+```
+
+Run the newly created migration with `bin/rails db:migrate`:
+
+```
+== 20220629124619 CreateCryptoPrices: migrating ===============================
+-- create_table(:crypto_prices)
+   -> 0.0038s
+== 20220629124619 CreateCryptoPrices: migrated (0.0039s) ======================
+```
+
+Then run server with `bin/rails s`.
+
+Navigate to index page for the new entity at `http://localhost:3000/crypto_prices`
+
+![crypto prices index](doc-images/crypto-prices-index.png "crypto prices index")
+
+Click "New Crypto Price" link, navigates to `http://localhost:3000/crypto_prices/new`:
+
+![crypto price new](doc-images/crypto-price-new.png "crypto price new")
+
+Notice there's a field for the related Cryptocurrency but it's a string field that's expecting the cryptocurrency id. This is not a good user experience because they wouldn't know the id. Improve this by making a small change to the generated form view for crypto price.
+
+Originally generated `text_field`:
+
+```erb
+<!-- stocktracker/app/views/crypto_prices/_form.html.erb -->
+<div class="field">
+  <%= form.label :cryptocurrency_id %>
+  <%= form.text_field :cryptocurrency_id %>
+</div>
+```
+
+Change to `collection_select`:
+
+```erb
+<!-- stocktracker/app/views/crypto_prices/_form.html.erb -->
+<div class="field">
+  <%= form.label :cryptocurrency_id %>
+  <%= form.collection_select :cryptocurrency_id, Cryptocurrency.all, :id, :name %>
+</div>
+```
+
+See [collection_select API](https://api.rubyonrails.org/classes/ActionView/Helpers/FormOptionsHelper.html#method-i-collection_select) for more details on what this helper generates.
+
+Also see [FormOptionsHelper API](https://api.rubyonrails.org/classes/ActionView/Helpers/FormOptionsHelper.html).
+
+Refresh new crypto price form - notice that Cryptocurrency field is now a dropdown listing all the Cryptocurrencies in the system:
+
+![crypto price new select](doc-images/crypto-price-new-select.png "crypto price new select")
+
+Fill out an example price for Bitcoin and click "Create Crypto price" button:
+
+![example price](doc-images/example-price.png "example price")
+
+Browser submits POST to `http://localhost:3000/crypto_prices`, Payload:
+
+![crypto price payload](doc-images/crypto-price-payload.png "crypto price payload")
+
+Rails console output - notice that it gets the related cryptocurrency ID and looks it up in `cryptocurrencies` table, then inserts that into `crypto_prices` table for value of `cryptocurrency_id`:
+
+```
+Started POST "/crypto_prices" for ::1 at 2022-06-29 09:19:02 -0400
+Processing by CryptoPricesController#create as HTML
+  Parameters: {"authenticity_token"=>"[FILTERED]", "crypto_price"=>"[FILTERED]", "commit"=>"Create Crypto price"}
+   (0.1ms)  SELECT sqlite_version(*)
+  ↳ app/controllers/crypto_prices_controller.rb:27:in `block in create'
+  TRANSACTION (0.1ms)  begin transaction
+  ↳ app/controllers/crypto_prices_controller.rb:27:in `block in create'
+  Cryptocurrency Load (0.3ms)  SELECT "cryptocurrencies".* FROM "cryptocurrencies" WHERE "cryptocurrencies"."id" = ? LIMIT ?  [["id", 1], ["LIMIT", 1]]
+  ↳ app/controllers/crypto_prices_controller.rb:27:in `block in create'
+  CryptoPrice Create (0.8ms)  INSERT INTO "crypto_prices" ("price", "cryptocurrency_id", "captured_at", "created_at", "updated_at") VALUES (?, ?, ?, ?, ?)  [["price", 5000.0], ["cryptocurrency_id", 1], ["captured_at", "2019-01-18"], ["created_at", "2022-06-29 13:19:02.765125"], ["updated_at", "2022-06-29 13:19:02.765125"]]
+  ↳ app/controllers/crypto_prices_controller.rb:27:in `block in create'
+  TRANSACTION (15.3ms)  commit transaction
+  ↳ app/controllers/crypto_prices_controller.rb:27:in `block in create'
+Redirected to http://localhost:3000/crypto_prices/1
+Completed 302 Found in 91ms (ActiveRecord: 17.0ms | Allocations: 9353)
+```
+
+UI shows successfully created:
+
+![crypto price created](doc-images/crypto-price-created.png "crypto price created")
+
+But notice the generated show view displays "Cryptocurrency: 1". It would be more user friendly to show the name of the associated crypto currency rather than ID. Let's fix this in the show view for the crypto price:
+
+Change originally generated show view:
+
+```erb
+<!-- stocktracker/app/views/crypto_prices/show.html.erb -->
+<p>
+  <strong>Cryptocurrency:</strong>
+  <%= @crypto_price.cryptocurrency_id %>
+</p>
+```
+
+To:
+
+```erb
+<!-- stocktracker/app/views/crypto_prices/show.html.erb -->
+<p>
+  <strong>Cryptocurrency:</strong>
+  <%= @crypto_price.cryptocurrency.name %>
+</p>
+```
+
+This works because the CryptoPrice model refers to its associated Cryptocurrency via the declared `belongs_to` macro:
+
+```ruby
+# stocktracker/app/models/cryptocurrency.rb
+class CryptoPrice < ApplicationRecord
+  belongs_to :cryptocurrency
+end
+```
