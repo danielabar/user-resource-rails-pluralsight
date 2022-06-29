@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 2022_06_28_104551) do
+ActiveRecord::Schema.define(version: 2022_06_29_120219) do
 
   create_table "companies", force: :cascade do |t|
     t.datetime "created_at", precision: 6, null: false
@@ -18,6 +18,13 @@ ActiveRecord::Schema.define(version: 2022_06_28_104551) do
     t.string "name", null: false
     t.string "ticker_symbol", null: false
     t.string "risk_factor", null: false
+  end
+
+  create_table "cryptocurrencies", force: :cascade do |t|
+    t.string "name"
+    t.date "started_at"
+    t.datetime "created_at", precision: 6, null: false
+    t.datetime "updated_at", precision: 6, null: false
   end
 
   create_table "stock_prices", force: :cascade do |t|

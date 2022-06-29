@@ -16,8 +16,10 @@
     - [Database Layer](#database-layer)
     - [Demo: Custom Validators](#demo-custom-validators)
     - [Hacks and Hooks](#hacks-and-hooks)
-    - [Demo Part 1: Hacks and Hooks](#demo-part-1-hacks-and-hooks)
-    - [Demo Part 2: Hacks and Hooks](#demo-part-2-hacks-and-hooks)
+    - [Demo Hacks and Hooks](#demo-hacks-and-hooks)
+  - [Building an Application Prototype](#building-an-application-prototype)
+    - [Scaffolding](#scaffolding)
+    - [Demo Part 1: Scaffolding](#demo-part-1-scaffolding)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -861,7 +863,7 @@ For high level business rules, a change in one model may have an effect on other
 * `before_save :method_name`: Will run `method_name` before performing an insert or update (assumes model has already passed validation). Does not execute `method_name` of the model's `.valid?` method returns false
 * `after_save :method_name`: Runs `method_name` after a model instance has been successfully saved or updated in the database.
 
-### Demo Part 1: Hacks and Hooks
+### Demo Hacks and Hooks
 
 Currently we can bypass application level validation by inserting invalid data directly in the database. Launch db client with `sqlite3 stocktracker/db/development.sqlite3`:
 
@@ -989,4 +991,172 @@ c.ticker_symbol
 # => "YYY"
 ```
 
-### Demo Part 2: Hacks and Hooks
+## Building an Application Prototype
+
+### Scaffolding
+
+**Advanced Queries**
+
+Business logic on model layer. Three ways to use `where` method:
+
+1. `Company.where(name: "Tesla")` - pass set of key/value pairs, i.e. hash. Key is attribute name of model, value specifies to return all records with that matching value.
+2. `Company.where("name LIKE ?", "%a%")` - prepared statement - pass in string containing sql condition. The `?` serves as placeholder for values to be passed in. Number of question marks should match number of values after the query string. In this example, the percent is a wildcard - find all companies that have an `a` somewhere in their name.
+3. `Company.where("name LIKE :q", q: "%a%")` - Use symbol instead of question mark placeholders to represent parameters. For each symbol that appears in query string, need to pass a key/value pair whose key is the symbol.
+
+**CRUD Operations**
+
+Represents ~90% of web app functionality.
+
+* Create: Inserts a new record
+* Read: Fetches (a) record/s
+* Update: Updates a record
+* Delete: Deletes a record
+
+**Scaffolding Syntax**
+
+Given a defined entity, Rails can scaffold everything needed for CRUD operations on this entity.
+
+```
+bin/rails generate scaffold Entity attr1:data_type attr2:data_type...
+```
+
+Example for a `Post` entity with two attributes: title and content:
+
+```
+bin/rails generate scaffold Post title:string content:text
+```
+
+**What Scaffolding Provides**
+
+* DB migration file to generate the table schema
+* Model class to represent the entity
+* Controller class to process requests representing the http endpoints that will be forwarded to the application
+* Views for forms and displays
+* Entry to routes file to define all the endpoints for the model
+
+### Demo Part 1: Scaffolding
+
+Add a new entity `Cryptocurrency` to our stock tracker app using scaffolding:
+
+```
+bin/rails generate scaffold Cryptocurrency name:string started_at:date
+```
+
+Generates all of these files:
+
+```
+invoke  active_record
+create    db/migrate/20220629120219_create_cryptocurrencies.rb
+create    app/models/cryptocurrency.rb
+invoke    test_unit
+create      test/models/cryptocurrency_test.rb
+create      test/fixtures/cryptocurrencies.yml
+invoke  resource_route
+ route    resources :cryptocurrencies
+invoke  scaffold_controller
+create    app/controllers/cryptocurrencies_controller.rb
+invoke    erb
+create      app/views/cryptocurrencies
+create      app/views/cryptocurrencies/index.html.erb
+create      app/views/cryptocurrencies/edit.html.erb
+create      app/views/cryptocurrencies/show.html.erb
+create      app/views/cryptocurrencies/new.html.erb
+create      app/views/cryptocurrencies/_form.html.erb
+invoke    resource_route
+invoke    test_unit
+create      test/controllers/cryptocurrencies_controller_test.rb
+create      test/system/cryptocurrencies_test.rb
+invoke    helper
+create      app/helpers/cryptocurrencies_helper.rb
+invoke      test_unit
+invoke    jbuilder
+create      app/views/cryptocurrencies/index.json.jbuilder
+create      app/views/cryptocurrencies/show.json.jbuilder
+create      app/views/cryptocurrencies/_cryptocurrency.json.jbuilder
+invoke  assets
+invoke    scss
+create      app/assets/stylesheets/cryptocurrencies.scss
+invoke  scss
+create    app/assets/stylesheets/scaffolds.scss
+```
+
+Run `bin/rails db:migrate` to apply the generated migration for cryptocurrency table:
+
+```
+== 20220629120219 CreateCryptocurrencies: migrating ===========================
+-- create_table(:cryptocurrencies)
+   -> 0.0031s
+== 20220629120219 CreateCryptocurrencies: migrated (0.0032s) ==================
+```
+
+Then start server with `bin/rails s`.
+
+Then navigate to index page of cryptocurrencies at `http://localhost:3000/cryptocurrencies`:
+
+![crypto index](doc-images/crypto-index.png "crypto index")
+
+Click on link to create a new cryptocurrency. Navigates to `http://localhost:3000/cryptocurrencies/new` with a form to enter the name and start date:
+
+![crypto new](doc-images/crypto-new.png "crypto new")
+
+Fill out the form with any sample data:
+
+![crypto sample data](doc-images/crypto-sample-data.png "crypto sample data")
+
+Note that the `date_select` form helper by default provides 5 years before and after relative to current date:
+
+```erb
+<%= form.date_select :started_at %>
+```
+
+This can be modified using the `start_year` and `end_year` options:
+
+```erb
+<%= form.date_select :started_at, start_year: Date.today.year - 20, end_year: Date.today.year  %>
+```
+
+See the [DateHelper API](https://api.rubyonrails.org/classes/ActionView/Helpers/DateHelper.html) for more details.
+
+After filling out the form, click `Create Cryptocurrency` button.
+
+Devtools shows Form Data payload from this form submission:
+
+![form data](doc-images/form-data.png "form data")
+
+Rails console - unfortunately the cryptocurrency parameters are `FILTERED` because Rails thinks this is a secret like a password - possible to modify this?
+
+```
+Started POST "/cryptocurrencies" for ::1 at 2022-06-29 08:32:10 -0400
+Processing by CryptocurrenciesController#create as HTML
+  Parameters: {"authenticity_token"=>"[FILTERED]", "cryptocurrency"=>"[FILTERED]", "commit"=>"Create Cryptocurrency"}
+   (0.1ms)  SELECT sqlite_version(*)
+  ↳ app/controllers/cryptocurrencies_controller.rb:27:in `block in create'
+  TRANSACTION (0.1ms)  begin transaction
+  ↳ app/controllers/cryptocurrencies_controller.rb:27:in `block in create'
+  Cryptocurrency Create (1.5ms)  INSERT INTO "cryptocurrencies" ("name", "started_at", "created_at", "updated_at") VALUES (?, ?, ?, ?)  [["name", "Bitcoin"], ["started_at", "2017-01-01"], ["created_at", "2022-06-29 12:32:10.211555"], ["updated_at", "2022-06-29 12:32:10.211555"]]
+  ↳ app/controllers/cryptocurrencies_controller.rb:27:in `block in create'
+  TRANSACTION (0.9ms)  commit transaction
+  ↳ app/controllers/cryptocurrencies_controller.rb:27:in `block in create'
+Redirected to http://localhost:3000/cryptocurrencies/1
+Completed 302 Found in 13ms (ActiveRecord: 2.8ms | Allocations: 3276)
+```
+
+Redirects to the show view for the newly created cryptocurrency which got an id of `1` in the database:
+
+![crypto show](doc-images/crypto-show.png "crypto show")
+
+Create another cryptocurrency - Ethereum, then view the index page `http://localhost:3000/cryptocurrencies` - it lists all created cryptocurrencies:
+
+![crypto index list](doc-images/crypto-index-list.png "crypto index list")
+
+Can edit any cryptocurrency using Edit link, navigates to `http://localhost:3000/cryptocurrencies/2/edit`:
+
+![crypto edit](doc-images/crypto-edit.png "crypto edit")
+
+With just a single `scaffold` command, got a fully functioning CRUD app for the entity specified in the scaffold.
+
+Now generate another scaffold for a related entity `CryptoPrice`. This entity has a price, but also a reference to `CryptoCurrency` entity. Use `references` data type in the scaffold command to specify this:
+
+```
+bin/rails generate scaffold CryptoPrice price:decimal cryptocurrency:references captured_at:date
+```

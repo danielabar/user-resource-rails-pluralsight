@@ -1,0 +1,14 @@
+<p id="notice"><%= notice %></p>
+
+<p>
+  <strong>Name:</strong>
+  <%= @cryptocurrency.name %>
+</p>
+
+<p>
+  <strong>Started at:</strong>
+  <%= @cryptocurrency.started_at %>
+</p>
+
+<%= link_to 'Edit', edit_cryptocurrency_path(@cryptocurrency) %> |
+<%= link_to 'Back', cryptocurrencies_path %>
