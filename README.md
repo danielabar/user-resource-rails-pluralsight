@@ -20,6 +20,7 @@
   - [Building an Application Prototype](#building-an-application-prototype)
     - [Scaffolding](#scaffolding)
     - [Demo Part 1: Scaffolding](#demo-part-1-scaffolding)
+    - [Demo Part 2: Scaffolding](#demo-part-2-scaffolding)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1310,3 +1311,5 @@ class CryptoPrice < ApplicationRecord
   belongs_to :cryptocurrency
 end
 ```
+
+### Demo Part 2: Scaffolding
