@@ -21,7 +21,7 @@
     - [Scaffolding](#scaffolding)
     - [Demo Part 1: Scaffolding](#demo-part-1-scaffolding)
     - [Demo Part 2: Scaffolding](#demo-part-2-scaffolding)
-    - [Demo Part 1: Prototyping](#demo-part-1-prototyping)
+    - [Demo: Prototyping](#demo-prototyping)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1363,6 +1363,80 @@ Try going back to `http://localhost:3000/crypto_prices/new` and add another pric
 
 ![currency and prices](doc-images/currency-and-prices.png "currency and prices")
 
-### Demo Part 1: Prototyping
+### Demo: Prototyping
 
 Scaffolding can sometimes generate more than what we need. Let's go through the exercise for `Company` entity, but this time, create everything we need manually.
+
+Start by creating companies controller to handle requests for `Company` resource, with `index` method to set an instance variable containing all the companies in the system, which will then be available to the index view for iterating and displaying:
+
+```ruby
+# stocktracker/app/controllers/companies_controller.rb
+class CompaniesController < ApplicationController
+  def index
+    @companies = Company.all
+  end
+end
+```
+
+Add the view in a new `views/companies` directory to iterate over each company and display its name, ticker symbol, and risk factor. Also generate a column for actions such as a link to the show page.
+
+```erb
+<!-- stocktracker/app/views/companies/index.html.erb -->
+<h1>Companies</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Ticker Symbol</th>
+      <th>Risk Factor</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @companies.each do |c| %>
+      <tr>
+        <td><%=c.name %></td>
+        <td><%=c.ticker_symbol %></td>
+        <td><%=c.risk_factor %></td>
+        <td>
+          <a href="/companies/<%= c.id %>">Show</a>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+```
+
+Add entries to router for index and show for Company resource (previously scaffold did that for us):
+
+```ruby
+# stocktracker/config/routes.rb
+Rails.application.routes.draw do
+  resources :crypto_prices
+  resources :cryptocurrencies
+
+  get "/companies", to: "companies#index"
+  get "/companies/:id", to: "companies#show"
+
+  root 'companies#index'
+end
+```
+
+Navigate to `http://localhost:3000/companies` to see list of companies (use Rails console to create a few if there are none currently in database):
+
+![companies index view](doc-images/companies-index-view.png "companies index view")
+
+Use Rails console to add a few prices for Tesla:
+
+```ruby
+c = Company.find_by(name: "Tesla")
+p = StockPrice.create(price: 500, captured_at: "2020-01-01", company: c)
+p = StockPrice.create(price: 600, captured_at: "2020-02-01", company: c)
+p = StockPrice.create(price: 700, captured_at: "2020-03-01", company: c)
+p = StockPrice.create(price: 800, captured_at: "2020-04-01", company: c)
+```
+
+Now implement the `show` action so we could click on Show link to view company details including its stock prices:
+
+Left at 2:03 of last module.
