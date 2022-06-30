@@ -21,6 +21,7 @@
     - [Scaffolding](#scaffolding)
     - [Demo Part 1: Scaffolding](#demo-part-1-scaffolding)
     - [Demo Part 2: Scaffolding](#demo-part-2-scaffolding)
+    - [Demo Part 1: Prototyping](#demo-part-1-prototyping)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -1124,7 +1125,7 @@ Devtools shows Form Data payload from this form submission:
 
 ![form data](doc-images/form-data.png "form data")
 
-Rails console - unfortunately the cryptocurrency parameters are `FILTERED` because Rails thinks this is a secret like a password - possible to modify this?
+Rails console - unfortunately the cryptocurrency parameters are `FILTERED` because Rails thinks this is a secret like a password - possible to modify this? See `stocktracker/config/initializers/filter_parameter_logging.rb`.
 
 ```
 Started POST "/cryptocurrencies" for ::1 at 2022-06-29 08:32:10 -0400
@@ -1313,3 +1314,55 @@ end
 ```
 
 ### Demo Part 2: Scaffolding
+
+We can also hook up Cryptocurrency to its related prices for showing in UI.
+
+Start by updating model to define association to its array of prices:
+
+```ruby
+# stocktracker/app/models/cryptocurrency.rb
+class Cryptocurrency < ApplicationRecord
+  has_many :crypto_prices
+end
+```
+
+Edit show view for cryptocurrency to loop over the `@cryptocurrency` instance's `crypto_prices` and display each `price` and its `captured_at` date:
+
+```erb
+<!-- stocktracker/app/views/cryptocurrencies/show.html.erb -->
+<p id="notice"><%= notice %></p>
+
+<p>
+  <strong>Name:</strong>
+  <%= @cryptocurrency.name %>
+</p>
+
+<p>
+  <strong>Started at:</strong>
+  <%= @cryptocurrency.started_at %>
+</p>
+
+<hr>
+
+<h3>Prices</h3>
+<ul>
+  <% @cryptocurrency.crypto_prices.each do |cp| %>
+    <li>
+      <%= number_to_currency(cp.price) %> (as of <%= cp.captured_at %>)
+    </li>
+  <% end %>
+</ul>
+
+<%= link_to 'Edit', edit_cryptocurrency_path(@cryptocurrency) %> |
+<%= link_to 'Back', cryptocurrencies_path %>
+```
+
+Not covered in course but I added [number_to_currency](https://api.rubyonrails.org/classes/ActionView/Helpers/NumberHelper.html#method-i-number_to_currency) view helper from Rails to display price like `$5000.00` instead of `5000.0` which is what gets returned from BigDecimal `to_s` method. Since price column is defined as `t.decimal :price`, ActiveRecord maps it to Ruby `BigDecimal`.
+
+Try going back to `http://localhost:3000/crypto_prices/new` and add another price for Bitcoin, then refresh show view `http://localhost:3000/cryptocurrencies/1` to confirm the new price is also listed:
+
+![currency and prices](doc-images/currency-and-prices.png "currency and prices")
+
+### Demo Part 1: Prototyping
+
+Scaffolding can sometimes generate more than what we need. Let's go through the exercise for `Company` entity, but this time, create everything we need manually.

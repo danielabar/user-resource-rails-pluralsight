@@ -10,5 +10,16 @@
   <%= @cryptocurrency.started_at %>
 </p>
 
+<hr>
+
+<h3>Prices</h3>
+<ul>
+  <% @cryptocurrency.crypto_prices.each do |cp| %>
+    <li>
+      <%= number_to_currency(cp.price) %> (as of <%= cp.captured_at %>)
+    </li>
+  <% end %>
+</ul>
+
 <%= link_to 'Edit', edit_cryptocurrency_path(@cryptocurrency) %> |
 <%= link_to 'Back', cryptocurrencies_path %>
