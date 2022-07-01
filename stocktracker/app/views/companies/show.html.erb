@@ -1,0 +1,23 @@
+<h1><%= @company.name %></h1>
+<h2>Ticker: <%= @company.ticker_symbol %></h2>
+<h3>Risk: <%= @company.risk_factor %></h1>
+
+<hr>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Price</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <% @stock_prices.each do |stock_price| %>
+      <tr>
+        <td><%= stock_price.captured_at %></td>
+        <td><%= number_to_currency(stock_price.price) %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

@@ -1427,7 +1427,7 @@ Navigate to `http://localhost:3000/companies` to see list of companies (use Rail
 
 ![companies index view](doc-images/companies-index-view.png "companies index view")
 
-Use Rails console to add a few prices for Tesla:
+Use Rails console to add a few prices for Tesla. Notice use of `create` method to both create a new model instance *and* save it to the database in one line:
 
 ```ruby
 c = Company.find_by(name: "Tesla")
@@ -1437,6 +1437,59 @@ p = StockPrice.create(price: 700, captured_at: "2020-03-01", company: c)
 p = StockPrice.create(price: 800, captured_at: "2020-04-01", company: c)
 ```
 
-Now implement the `show` action so we could click on Show link to view company details including its stock prices:
+Implement the `show` method in controller so we could click on Show link to view company details including its stock prices. The company can be loaded from the `id` passed in the `params` from show url eg: `http://localhost:3000/companies/1`.
 
-Left at 2:03 of last module.
+Notice the use of `where` to find stock prices associated with the given company:
+
+```ruby
+# stocktracker/app/controllers/companies_controller.rb
+class CompaniesController < ApplicationController
+  def index
+    @companies = Company.all
+  end
+
+  def show
+    @company = Company.find(params[:id])
+    @stock_prices = StockPrice.where(company_id: @company.id)
+
+    # a better way?
+    # Company.includes(:stock_prices).find(params[:id])
+  end
+end
+```
+
+[includes](https://guides.rubyonrails.org/active_record_querying.html#includes)
+
+Implement the show view:
+
+```erb
+<!-- stocktracker/app/views/companies/show.html.erb -->
+<h1><%= @company.name %></h1>
+<h2>Ticker: <%= @company.ticker_symbol %></h2>
+<h3>Risk: <%= @company.risk_factor %></h1>
+
+<hr>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Price</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <% @stock_prices.each do |stock_price| %>
+      <tr>
+        <td><%= stock_price.captured_at %></td>
+        <td><%= number_to_currency(stock_price.price) %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+```
+
+Refresh show view in browser `http://localhost:3000/companies/1`:
+
+![show company and prices](doc-images/show-company-and-prices.png "show company and prices")
+
