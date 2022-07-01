@@ -13,7 +13,7 @@
   </thead>
 
   <tbody>
-    <% @stock_prices.each do |stock_price| %>
+    <% @company.stock_prices.each do |stock_price| %>
       <tr>
         <td><%= stock_price.captured_at %></td>
         <td><%= number_to_currency(stock_price.price) %></td>

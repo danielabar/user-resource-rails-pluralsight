@@ -1451,14 +1451,9 @@ class CompaniesController < ApplicationController
   def show
     @company = Company.find(params[:id])
     @stock_prices = StockPrice.where(company_id: @company.id)
-
-    # a better way?
-    # Company.includes(:stock_prices).find(params[:id])
   end
 end
 ```
-
-[includes](https://guides.rubyonrails.org/active_record_querying.html#includes)
 
 Implement the show view:
 
@@ -1493,3 +1488,48 @@ Refresh show view in browser `http://localhost:3000/companies/1`:
 
 ![show company and prices](doc-images/show-company-and-prices.png "show company and prices")
 
+Not covered in course, but could also use [includes](https://guides.rubyonrails.org/active_record_querying.html#includes) in `show` method of companies controller to fetch a company *and* it's associated stock prices in one line:
+
+```ruby
+# stocktracker/app/controllers/companies_controller.rb
+class CompaniesController < ApplicationController
+  def index
+    @companies = Company.all
+  end
+
+  def show
+    @company = Company.includes(:stock_prices).find(1)
+  end
+end
+```
+
+Then modify show view to iterate over `@company.stock_prices` rather than `@stock_prices`:
+
+```erb
+<!-- stocktracker/app/views/companies/show.html.erb -->
+<h1><%= @company.name %></h1>
+<h2>Ticker: <%= @company.ticker_symbol %></h2>
+<h3>Risk: <%= @company.risk_factor %></h1>
+
+<hr>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Price</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <% @company.stock_prices.each do |stock_price| %>
+      <tr>
+        <td><%= stock_price.captured_at %></td>
+        <td><%= number_to_currency(stock_price.price) %></td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+```
+
+Result looks exactly the same in browser.
